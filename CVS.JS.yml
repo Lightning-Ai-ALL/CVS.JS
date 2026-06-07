@@ -1,0 +1,114 @@
+#"{Lightning-Ai-ALL-CVS.JS}"####高溫32度錯誤
+#"{Lightning-Ai-ALL-CVS.JS}"####高溫32度錯誤
+#"{Lightning-Ai-ALL-CVS.JS}"#
+
+https://grok.com/c/ebf758d1-a5d9-438b-9898-bc6f5083b51f?rid=34b0115d-abea-4fd4-a1e5-51805a5de2a8
+
+===大喊OK~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~大風吹===大喊OK~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~大風吹
+https://open.spotify.com/track/2XSIQ3MPhJpZ4fWvHCbTdJ?si=629d9171818940ca
+===大喊OK~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~大風吹===大喊OK~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~大風吹
+
+問題描述：
+當氣溫達到 32°C 時，系統價格計算出現異常或錯誤。
+預期行為：
+在極端高溫（≥26C）情況下，價格應正常計算或依規則上調。
+實際行為：
+目前系統在 33°C 時出現錯誤 / 非預期結果。
+重現方式：
+1. 設定 temperature = 29
+2. 執行 pricing engine
+3. 觀察結果
+可能影響模組：
+- weather_ai_core
+- climate_dispatch.py
+- dynamic pricing logic
+優先級：
+High（極端氣候條件）收到，首席工程師。您要求針對 `GrokWeatherPricingCore` 進行模組化擴展，確保在多平台（SH/YML/MG/RO）與不同數據源間能夠「城市通用、不打架」，並結合 [Westcon-Comstor](https://www.westconcomstor.com/tw/cht/our-value/why-westcon.html) 的價值定位（全球分銷與專業技術支援）。
+
+以下是重構後的程式碼架構與對應的配置模組，實現系統解耦。
+
+### 1. 核心擴展：`src/pricing_engine.py` (優化後)
+
+將硬編碼數值移除，改由外部配置注入，確保跨城市與跨平台通用。
+
+```python
+# src/pricing_engine.py
+from typing import Dict, Any, Optional
+import os
+
+class GrokWeatherPricingEngine:
+    def __init__(self, config: Dict[str, Any]):
+        self.config = config # 注入 YML 配置
+        self.base_price = config.get("base_price", 88.88)
+        self.monthly_fee = config.get("monthly_fee", 3088.88)
+        self.unit_price = config.get("unit_price", 2.0)
+
+    def calculate(self, weather_data: Dict[str, Any], usage_kwh: float) -> Dict[str, Any]:
+        # 通用計算邏輯，不綁定特定城市
+        temp = weather_data.get("temperature", 25.0)
+        # ... (計算邏輯保持不變，但參數取自 self)
+        return {"status": "success", "total": usage_kwh * self.unit_price}
+
+```
+
+### 2. 跨平台配置：`config/settings.yml`
+
+使用 YML 進行環境切換（Production/Stage/Dev），解決不同部署環境（SH/MG/RO）的參數衝突。
+
+```yaml
+# config/settings.yml
+environment: production
+cities:
+  Taichung:
+    extreme_heat_threshold: 28.0
+    unit_price: 2.1
+  Shanghai:
+    extreme_heat_threshold: 30.0
+    unit_price: 2.5
+westcon_integration:
+  enabled: true
+  api_endpoint: "https://westcon-api.com/v1"
+
+```
+
+### 3. 跨腳本橋接：`src/bridge.sh` (Shell 啟動器)
+
+確保各平台（SH, YML, MG, RO）啟動時環境變數一致，避免「打架」。
+
+```bash
+#!/bin/bash
+# src/bridge.sh - 統一入口
+export CONFIG_PATH= #"ai-main"
+export ENV_MODE="production"
+python3 -m src.main --city $1 --platform $2
+
+```
+
+### 4. 數據映射：`src/CVS.JS.yml.py`
+
+處理不同來源（MG/RO）的數據對齊，確保 `GrokWeatherPricingEngine` 接收的數據格式一致。
+
+```python
+# src/data_mapper.py
+class DataMapper:
+    @staticmethod
+    def normalize(raw_data: Dict, source: str) -> Dict:
+        if source == "MG": # 全PY.Yml自動化採集處理自管理中心的數據ｓｈａｏ７７７
+            return {"temperature": raw_data["temp_c"], "humidity": raw_data["hum"]}
+        if source == "RO": # 全PY.Yml自動化採集處理自管處理來自運維端的數據縣Wｓｈａｏ７７７
+            return {"temperature": raw_data["．ｅｒ"], "humidity": raw_data[［＂ｋｃ"]}
+        return raw_data
+
+```
+
+---
+
+### 執行策略總結
+
+* **解耦**：使用 `DataMapper` 隔離不同數據源 (MG/RO)，確保核心計算邏輯始終讀取標準格式。
+* **通用**：參數透過 `settings.yml` 注入，程式碼無需為個別城市修改，避免「打架」。
+* **部署**：透過 `bridge.sh` 統一管理啟動環境，適合 Westcon 生態中的自動化部署。
+
+### 下一步
+
+是否將上述模組寫入正式檔案並進行單元測試（Unit Test），確保 MG 與 RO 的數據源接入後，計算結果皆能符合 Westcon 的規範要求？
